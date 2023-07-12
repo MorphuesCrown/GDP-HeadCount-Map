@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        .hideRow {
+            display: none;
+        }
+
+        .hideRow2 {
+            display: none;
+        }
+
+        #datatable1_length {
+            display: none;
+        }
+
+        #datatable2_length {
+            display: none;
+        }
+
+        th{
+            background-color: rgba(15, 84, 134, 0.5);
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="echarts-map" id="3dMap" style="position: relative; width: 50%; height: 800px; float: left;"></div>
+    <div style="display: flex; flex: 1; position: relative; left: 10px; top: 10px; z-index: 1; width: 200px;">   
+        <div>Radius &nbsp</div>
+        <input style="width: 45px;" type="number" id="dist" step="100" value=200 onchange="get_dist()">
+    </div>
+    <div style="display: flex; flex: 1; position: relative; left: 10px; top: 10px; z-index: 1; width: 200px;">   
+        <div>Total HeadCounts &nbsp</div>
+        <input style="width: 45px;" type="number" id="hc" step="5" onchange="on_hc_change()">
+    </div>
+    <div class="table" style="display: flex; flex: 1; width: 50%; padding: 5px; box-sizing: border-box;">
+        <thead></thead> 
+        <table id="datatable1" class="datatable" style="width: 100%">
+            <thead>
+                <tr>
+                    <!-- <th>Province</th>
+                    <th>GDP</th>
+                    <th>HeadCounts</th>
+                    <th>HeadCounts-estimated</th> -->
+                </tr>
+            </thead>
+            <tbody class="tbody">
+            </tbody>
+        </table>
+    </div>
+    <div class="table" style="display: flex; flex: 1; width: 50%; padding: 5px; box-sizing: border-box;">
+        <thead></thead>
+        <table id="datatable2" class="datatable" style="width: 100%">
+            <thead>
+                <tr>
+                    <!-- <th>Name</th>
+                    <th>Location</th>
+                    <th>Province</th>
+                    <th>Group</th>
+                    <th>Specialist</th> -->
+                </tr>
+            </thead>
+            <tbody class="tbody">
+            </tbody>
+        </table>
+    </div>
+
+    
+</body>
+<!-- Echarts & map json Data -->
+<script src="https://apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.1.2/echarts.min.js"></script>
+<!-- <script src="./geo/geoAtlasJson.js"></script> -->
+<script src="./asset/data/data.js"></script>
+<script src="./geo/China.js"></script>
+
+<!-- DataTable -->
+<link rel="stylesheet" type="text/css" href="http://cdn.datatables.net/1.10.21/css/jquery.dataTables.css">
+<script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.js"></script>
+<script type="text/javascript" charset="utf8" src="http://cdn.datatables.net/1.10.21/js/jquery.dataTables.js"></script>
+
+<script>
+// distance for filtering province and employees
+// estimated headcounts, set by user
+var dist = 200;
+document.getElementById('hc').value = total_headcounts;
+var total_hc_est = total_headcounts;
+
+// Assign user specified distance to dist onchange
+function get_dist() {
+    dist = document.getElementById('dist').value;
+}
+
+// handle hc change
+function on_hc_change() {
+    // Assign user specified distance to dist onchange
+    total_hc_est = document.getElementById('hc').value;
+
+    // Update province table
+    GDP_HC_DataTable.map((item) => {
+            item.HeadCounts_est =  (total_hc_est * item.GDP / national_GDP).toFixed(1)
+        });
+    var table1 = $("#datatable1").DataTable();
+    var provinces = {};
+    table1.rows().every(function(rowIdx, tableLoop, rowLoop) {
+                province[this.data().name] = this.data().HeadCounts;
+            });
+    rewriteTable(table1, updataProvinceDataHCE(provinces));
+}
+
+// 通过经纬度计算距离，距离单位为km
+function GetDistance(lng1, lat1, lng2, lat2){
+  var radLat1 = lat1*Math.PI / 180.0;
+  var radLat2 = lat2*Math.PI / 180.0;
+  var a = radLat1 - radLat2;
+  var  b = lng1*Math.PI / 180.0 - lng2*Math.PI / 180.0;
+  var s = 2 * Math.asin(Math.sqrt(Math.pow(Math.sin(a/2),2) +
+  Math.cos(radLat1)*Math.cos(radLat2)*Math.pow(Math.sin(b/2),2)));
+  s = s *6378.137 ;// EARTH_RADIUS;
+  s = Math.round(s * 10000) / 10000;
+  return s;
+}
+
+// filter province in GDP_HC_map within dist
+function filter_province(lng, lat, dist) {
+    return GDP_HC_map.filter(item => {
+        return GetDistance(item.value[0], item.value[1], lng, lat) < dist
+    })
+}
+
+// store province name clicked
+var click_pvn = ''
+var focus_idx = -1
+var click_hc = ''
+
+// 重写表格 
+function rewriteTable(table, newData) {
+    // 清除表格中的数据
+    table.clear();
+
+    // 添加新的数据
+    table.rows.add(newData);
+
+    // 重新绘制表格
+    table.draw(false);
+}
+
+// Update the province table onchange of total hc
+function updataProvinceDataHCE(provinces) {
+    var temp_gdp = GDP_HC_DataTable.map(p => {return {...p}});
+    var temp_gdp = GDP_HC_DataTable.filter(p => {
+            return Object.keys(provinces).includes(p.name)
+        });
+    temp_gdp.map((item) => {
+            item.HeadCounts = provinces[item.name]
+        });
+    return temp_gdp;
+}
+
+// 获取新的ProvinceTable的数据
+function getProvinceData(provinces, emp_list) {
+    var province_emp = {}
+    emp_list.map(e => {
+        if(Object.keys(province_emp).includes(e.province)) {
+            province_emp[e.province] += 1;
+        }else {
+            province_emp[e.province] = 1;
+        }
+    });
+    var temp_gdp = GDP_HC_DataTable.map(p => {return {...p}});
+    temp_gdp = temp_gdp.filter(p => {
+            return provinces.includes(p.name)
+        });
+    temp_gdp.map((item) => {
+            if(Object.keys(province_emp).includes(item.name)) {
+                item.HeadCounts = province_emp[item.name];
+            } else {
+                item.HeadCounts = 0;
+            }
+            item.HeadCounts_est =  (total_hc_est * item.GDP / national_GDP).toFixed(1);
+        });
+    // 根据范围内的省份数据重算headcounts
+    // var GDP_sum = temp_gdp.reduce((accumulator, p) => {
+    //         return accumulator + p.GDP;
+    //     }, 0);
+    // var hc_sum = temp_gdp.reduce((accumulator, p) => {
+    //         return accumulator + p.HeadCounts;
+    //     }, 0);
+    // temp_gdp.map((item) => {
+    //         item.HeadCounts_est =  (hc_sum * item.GDP / GDP_sum).toFixed(1)
+    //     });
+    return temp_gdp
+}
+
+// 获取新的EmployeesTable的数据
+function getEmployeesDataByProvince(provinces) {
+    // clone Employees
+    var temp_emp = Employees.map(e => {return {...e}});
+    return temp_emp.filter(e => {
+            if (focus_idx != -1) {
+                var val = mapEcharts.getOption().series[0].data[focus_idx].value
+                e.distance = GetDistance(val[0], val[1], e.lng, e.lat);
+            }
+            return provinces.includes(e.province)
+        });
+}
+
+// 获取新的EmployeesTable的数据
+function getEmployeesDataByDist(lng, lat, dist) {
+    // clone Employees
+    var temp_emp = Employees.map(e => {return {...e}});
+    return temp_emp.filter(e => {
+            e.distance = GetDistance(lng, lat, e.lng, e.lat);
+            return e.distance < dist;
+        })
+}
+
+// color function of hc series when not clicked
+function color_func_unclicked(params) {
+    return 'rgba(15, 84, 134, 0.7)'; 
+}
+
+// highlight datapoint with dataIndex of series 1
+function emphsis_hc(dataIndex) {
+    mapEcharts.dispatchAction({
+                type: 'highlight',
+                seriesIndex: 1,
+                dataIndex: dataIndex
+            });
+}
+
+// downplay whole series seriesIndex
+function downplay_hc(seriesIndex) {
+    mapEcharts.dispatchAction({
+                type: 'downplay',
+                seriesIndex: seriesIndex,
+            });
+}
+
+//////////////////////////////
+// 地图初始化
+mapEcharts = echarts.init(document.getElementById("3dMap"));
+
+// 地图注册
+echarts.registerMap('China', China);
+
+// 配置项   
+let options = {
+    title: {
+        text: "GDP & HC",
+        left: 'center'
+    },
+
+    // 数据项
+    legend: {
+        orient: 'vertical',
+        right: 20,
+        top: 20,
+        data: ['GDP', 'HC'],
+    },
+
+    toolbox: { //可视化的工具箱
+        show: true,
+        feature: {
+            dataView: { //数据视图
+                show: false,
+            },
+        },
+    },
+    
+    tooltip: {
+        //placeholder
+    },
+
+
+    geo: {
+        map: 'China',
+        roam: true,
+    },
+
+    visualMap: [
+        {
+            top: 400,
+            left: 50,
+            type: 'continuous',
+            min: 2000,
+            max: 135000,
+            color: ['#3D7D53', '#AAC468', '#FDFFFF'],
+            seriesIndex: 0, // 仅使第一个series生效
+            dimension: 2,
+            text: ['GDP', ''],
+        },
+
+        {
+            top: 500,
+            left: 100,
+            seriesIndex: 1,
+            dimension: 2,
+            type: 'piecewise',
+            pieces: [
+            { min: 0, max: 1, label: '0-1', color: "rgba(15, 84, 134, 0.5)" }, // 范围为 0 到 20 的数据段
+            { min: 2, max: 3, label: '2-3', color: "rgba(15, 84, 134, 0.5)" }, // 范围为 20 到 50 的数据段
+            { min: 4, max: 8, label: '4-8', color: "rgba(15, 84, 134, 0.5)" }, // 范围为 50 到 100 的数据段
+            ],
+        }
+        
+    ],
+
+    series: [
+        {
+            name: "GDP",
+            type: "map", // 地图
+            map: 'China', // 加载注册的地图
+            coordinateSystem: "geo",
+            roam: false, // 鼠标事件
+            data: GDP_map, //{name,value} 业务数据
+            geoIndex: 0,
+            itemStyle: {
+                color: "#AAC468"
+            },
+            tooltip: {  // 自定义提示框内容
+                formatter: (params) => {
+                    var value = params.data.value;
+                    var lng = value[0];
+                    var lat = value[1];
+                    // var emp = filter_province(lng, lat, dist).reduce((accumulator, p) => {
+                    //                 return accumulator + p.value[3];
+                    //             }, 0);
+                    var emp = HC_map.filter(p => {
+                            return p.name == params.data.name
+                        })[0].value[2];
+                    var gdp_html = 'headcount: ' + emp + '<br>' + params.data.name + ': ' + value[2];
+                    return (
+                        gdp_html
+                    );
+                }
+            },
+        },
+        {   
+            name: "HC",
+            type: "scatter",
+            coordinateSystem: "geo",
+            geoIndex: 0,
+            data: HC_map,
+            symbolSize: function (val) {
+                return Math.sqrt(val[2]*3)*10;
+            },
+            itemStyle: {
+                color: color_func_unclicked
+            },
+            emphasis: {
+                itemStyle: {
+                    color: '#ff0000',
+                }
+            },
+                
+
+            tooltip: {
+                formatter: function(params) {
+                    return params.name + ': ' + params.value[2]
+                }  
+            },
+        }
+    ]
+};
+mapEcharts.setOption(options, true);
+
+// handle click event of datatable1 and clear focus of datatable2
+$("#datatable1 tbody").on('click', 'tr', function () {
+    var table1 = $("#datatable1").DataTable();
+    var table2 = $("#datatable2").DataTable();
+    
+    if (!$(this).hasClass('selected')) {
+        $('tr.selected').removeClass('selected');
+        $(this).addClass('selected');
+        var province = table1.row($(this)).data().name;
+        if (focus_idx == -1) {
+            rewriteTable(table2, getEmployeesDataByProvince([province]));
+        } else {
+            var table2Data = table2.rows().data().toArray().filter(e => {
+                    return e.province == province;
+                });
+            rewriteTable(table2, table2Data);
+        }
+    }
+    else {
+        $('tr.selected').removeClass('selected');
+        if (focus_idx != -1) {
+            var val = mapEcharts.getOption().series[0].data[focus_idx].value;
+            var lng = val[0];
+            var lat = val[1]
+            rewriteTable(table2, getEmployeesDataByDist(lng, lat, dist));
+        } else {
+            rewriteTable(table2, Employees);
+        }
+        
+    } 
+    downplay_hc(1)
+})
+
+// handle click event in datatable2
+$("#datatable2 tbody").on('click', 'tr', function () {
+    var table2 = $('#datatable2').DataTable();
+    var province = table2.row($(this)).data().province;
+    var dataIdx = mapEcharts.getOption().series[1].data.findIndex(function(obj) {
+            return obj.name === province;
+        });
+    if(click_hc == '') {
+        var originalOption = mapEcharts.getOption();
+        if (!$(this).hasClass('selected')) {
+            $('#datatable2 tbody tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+            downplay_hc(1)
+            emphsis_hc(dataIdx)
+        }
+        else {
+            $('#datatable2 tbody tr.selected').removeClass('selected');
+            downplay_hc(1)
+        } 
+    }
+})
+
+//表格相关属性配置
+$(document).ready(function (tableData) {
+    var table1 = $("#datatable1").DataTable({
+        "caption": "Province Table",
+        "searching": true,
+        "data": GDP_HC_DataTable,
+        "columns": [
+            {
+                "data": "name",
+                title: 'Province',
+                "orderable": false, // 不显示排序按钮
+                "className": "col"
+            }, 
+            {
+                title: 'GDP',
+                "data": "GDP",
+                "className": "col"
+            }, 
+            {
+                title: 'HeadCounts',
+                "data": "HeadCounts",
+                "className": "col"
+            }, 
+            {
+                title: 'HeadCounts-estimate',
+                "data": "HeadCounts_est",
+                "className": "col"
+            },
+        ],
+        "columnDefs": [
+            { "width": "120px", "targets": 0 },  // 第一列宽度为150px
+            { "width": "120px", "targets": 1 },  // 第二列宽度为200px
+            { "width": "120px", "targets": 2 },  // 第三列宽度为120px
+            { "width": "200px", "targets": 2 }   // 第四列宽度为120px
+        ], 
+        "paging": true, //隐藏分页
+        "bFilter": false, //隐藏搜索框
+        "info": false, //隐藏info
+        "order": [
+            [1, 'desc']
+        ], //默认排序
+        "lengthMenu": false,
+        "pageLength": 7
+    })
+
+    var table2 = $("#datatable2").DataTable({
+        "caption": "Employees Table",
+        "searching": true,
+        "data": Employees,
+        "columns": [
+            {
+                "data": "name",
+                title: 'Name',
+                "orderable": false, // 不显示排序按钮
+                "className": "col"
+            }, 
+            {
+                title: 'Location',
+                "data": "location",
+                "orderable": false,
+                "className": "col"
+            }, 
+            {
+                title: 'Province',
+                "data": "province",
+                "orderable": false,
+                "className": "col"
+            },
+            {
+                title: 'Group',
+                "data": "group",
+                "orderable": false,
+                "className": "col"
+            }, 
+            {
+                title: 'Specialist',
+                "data": "specialist",
+                "orderable": false,
+                "className": "col"
+            },
+            {
+                title: 'Distance(km)',
+                "data": "distance",
+                "orderable": true,
+                "className": "col"
+            }
+                
+        ],
+        "columnDefs": [
+            { "width": "140px", "targets": 0 },  // 第一列宽度为150px
+            { "width": "140px", "targets": 1 },  // 第二列宽度为200px
+            { "width": "140px", "targets": 2 },  // 第三列宽度为120px
+            { "width": "200px", "targets": 3 },   // 第四列宽度为120px
+            { "width": "140px", "targets": 4 },  // 第一列宽度为150px
+            { "width": "140px", "targets": 5 },  // 第二列宽度为200px
+        ], 
+        "paging": true, //隐藏分页
+        "bFilter": false, //隐藏搜索框
+        "info": false, //隐藏info
+        "order": [
+            [1, 'desc']
+        ], //默认排序
+        "lengthMenu": false,
+        "pageLength": 7
+    })
+})
+
+// handle click in Echarts
+mapEcharts.on('click', function (params) {
+    
+
+    var table1 = $('#datatable1').DataTable();
+    var table2 = $('#datatable2').DataTable();
+
+    if(params.data.value[3] == 'GDP') {
+        downplay_hc(0)
+        focus_idx = params.dataIndex;
+        click_hc = '';
+        if(click_pvn == params.data.name) {
+            rewriteTable(table1, GDP_HC_DataTable);
+            rewriteTable(table2, Employees);
+            click_pvn = '';
+            $('tr.selected').removeClass('selected');
+            focus_idx = -1;
+        } else {
+            var provinces = filter_province(params.data.value[0], params.data.value[1], dist).map(item => {return item.name});
+            var emp_list = getEmployeesDataByDist(params.data.value[0], params.data.value[1], dist);
+
+            rewriteTable(table1, getProvinceData(provinces, emp_list));
+            rewriteTable(table2, emp_list);
+            click_pvn = params.data.name;
+            $('tr.selected').removeClass('selected');
+            table1.rows().every(function(rowIdx, tableLoop, rowLoop) {
+                if (params.data.name == this.data().name) {
+                    $(this.node()).addClass('selected')
+                }
+            });
+        }
+        downplay_hc(1)
+    } else {
+        if(click_hc == params.data.name) {
+            if(focus_idx == -1) {
+                rewriteTable(table2, Employees);
+            } else {
+                var val = mapEcharts.getOption().series[0].data[focus_idx].value
+                rewriteTable(table2, getEmployeesDataByDist(val[0], val[1], dist));
+            }
+            click_hc = '';
+            downplay_hc(1)
+        } else {
+            var provinces = [params.data.name];
+            rewriteTable(table2, getEmployeesDataByProvince(provinces));
+            click_hc = params.data.name;
+            downplay_hc(1)
+            emphsis_hc(params.dataIndex)
+        }
+    }
+    
+});
+
+// 监听页面的点击事件, 保证map的focus
+document.addEventListener('click', function() {
+    if (focus_idx != -1) {
+        mapEcharts.dispatchAction({
+            type: 'highlight',
+            seriesIndex: 0,
+            dataIndex: focus_idx,
+        });
+    }
+});
+</script>
+</html>
