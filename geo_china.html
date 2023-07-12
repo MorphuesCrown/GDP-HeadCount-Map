@@ -162,7 +162,9 @@ function updataProvinceDataHCE(provinces) {
 }
 
 // 获取新的ProvinceTable的数据
-function getProvinceData(provinces, emp_list) {
+function getProvinceData(province, emp_list) {
+    var adjcyProvinces = ProvinceAdjacency[province]
+    console.log(adjcyProvinces)
     var province_emp = {}
     emp_list.map(e => {
         if(Object.keys(province_emp).includes(e.province)) {
@@ -171,9 +173,10 @@ function getProvinceData(provinces, emp_list) {
             province_emp[e.province] = 1;
         }
     });
+    var province_list = Array.from(new Set(adjcyProvinces.concat(Object.keys(province_emp))));
     var temp_gdp = GDP_HC_DataTable.map(p => {return {...p}});
     temp_gdp = temp_gdp.filter(p => {
-            return provinces.includes(p.name)
+            return province_list.includes(p.name)
         });
     temp_gdp.map((item) => {
             if(Object.keys(province_emp).includes(item.name)) {
@@ -432,6 +435,12 @@ $(document).ready(function (tableData) {
         "data": GDP_HC_DataTable,
         "columns": [
             {
+                "data": "Rank",
+                title: 'Rank',
+                "orderable": true,
+                "className": "col"
+            },
+            {
                 "data": "name",
                 title: 'Province',
                 "orderable": false, // 不显示排序按钮
@@ -454,16 +463,17 @@ $(document).ready(function (tableData) {
             },
         ],
         "columnDefs": [
-            { "width": "120px", "targets": 0 },  // 第一列宽度为150px
-            { "width": "120px", "targets": 1 },  // 第二列宽度为200px
+            { "width": "60px", "targets": 0 },  // 第一列宽度为150px
+            { "width": "180px", "targets": 1 },  // 第二列宽度为200px
             { "width": "120px", "targets": 2 },  // 第三列宽度为120px
-            { "width": "200px", "targets": 2 }   // 第四列宽度为120px
+            { "width": "120px", "targets": 3 },   // 第四列宽度为120px
+            { "width": "200px", "targets": 4 }   // 第四列宽度为120px
         ], 
         "paging": true, //隐藏分页
         "bFilter": false, //隐藏搜索框
         "info": false, //隐藏info
         "order": [
-            [1, 'desc']
+            [0, 'asc']
         ], //默认排序
         "lengthMenu": false,
         "pageLength": 7
@@ -524,7 +534,7 @@ $(document).ready(function (tableData) {
         "bFilter": false, //隐藏搜索框
         "info": false, //隐藏info
         "order": [
-            [1, 'desc']
+            [0, 'asc']
         ], //默认排序
         "lengthMenu": false,
         "pageLength": 7
@@ -549,10 +559,11 @@ mapEcharts.on('click', function (params) {
             $('tr.selected').removeClass('selected');
             focus_idx = -1;
         } else {
-            var provinces = filter_province(params.data.value[0], params.data.value[1], dist).map(item => {return item.name});
+            var province = params.data.name
+            // var provinces = filter_province(params.data.value[0], params.data.value[1], dist).map(item => {return item.name});
             var emp_list = getEmployeesDataByDist(params.data.value[0], params.data.value[1], dist);
 
-            rewriteTable(table1, getProvinceData(provinces, emp_list));
+            rewriteTable(table1, getProvinceData(province, emp_list));
             rewriteTable(table2, emp_list);
             click_pvn = params.data.name;
             $('tr.selected').removeClass('selected');
