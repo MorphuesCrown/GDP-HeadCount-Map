@@ -107,7 +107,7 @@ function on_hc_change() {
     var table1 = $("#datatable1").DataTable();
     var provinces = {};
     table1.rows().every(function(rowIdx, tableLoop, rowLoop) {
-                province[this.data().name] = this.data().HeadCounts;
+                provinces[this.data().name] = this.data().HeadCounts;
             });
     rewriteTable(table1, updataProvinceDataHCE(provinces));
 }
@@ -164,7 +164,6 @@ function updataProvinceDataHCE(provinces) {
 // 获取新的ProvinceTable的数据
 function getProvinceData(province, emp_list) {
     var adjcyProvinces = ProvinceAdjacency[province]
-    console.log(adjcyProvinces)
     var province_emp = {}
     emp_list.map(e => {
         if(Object.keys(province_emp).includes(e.province)) {
